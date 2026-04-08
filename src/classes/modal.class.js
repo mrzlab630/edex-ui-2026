@@ -24,26 +24,29 @@ class Modal {
             case "error":
                 this.classes += " error";
                 zindex = 1500;
-                buttons.push({label:"PANIC", action:"window.modals['"+this.id+"'].close();"}, {label:"RELOAD", action:"window.location.reload(true);"});
+                buttons.push(
+                    {label: "PANIC", action: () => window.modals[this.id].close()},
+                    {label: "RELOAD", action: () => window.location.reload(true)}
+                );
                 augs.push("tr-clip", "bl-rect", "r-clip");
                 break;
             case "warning":
                 this.classes += " warning";
                 zindex = 1000;
-                buttons.push({label:"OK", action:"window.modals['"+this.id+"'].close();"});
+                buttons.push({label: "OK", action: () => window.modals[this.id].close()});
                 augs.push("bl-clip", "tr-clip", "r-rect", "b-rect");
                 break;
             case "custom":
                 this.classes += " info custom";
                 zindex = 500;
                 buttons = options.buttons || [];
-                buttons.push({label:"Close", action:"window.modals['"+this.id+"'].close();"});
+                buttons.push({label: "Close", action: () => window.modals[this.id].close()});
                 augs.push("tr-clip", "bl-clip");
                 break;
             default:
                 this.classes += " info";
                 zindex = 500;
-                buttons.push({label:"OK", action:"window.modals['"+this.id+"'].close();"});
+                buttons.push({label: "OK", action: () => window.modals[this.id].close()});
                 augs.push("tr-clip", "bl-clip");
                 break;
         }
@@ -53,7 +56,7 @@ class Modal {
             ${this.type === "custom" ? options.html : "<h5>"+this.message+"</h5>"}
             <div>`;
             buttons.forEach(b => {
-                DOMstring += `<button onclick="${b.action}">${b.label}</button>`;
+                DOMstring += `<button type="button">${b.label}</button>`;
             });
         DOMstring += `</div>
         </div>`;
@@ -89,12 +92,23 @@ class Modal {
         let tmp = document.createElement("div");
         tmp.innerHTML = DOMstring;
         let element = tmp.firstChild;
+        let buttonElements = element.querySelectorAll("button");
 
         element.addEventListener("mousedown", () => {
             this.focus();
         });
         element.addEventListener("touchstart", () => {
             this.focus();
+        });
+        buttonElements.forEach((button, index) => {
+            button.addEventListener("click", () => {
+                let action = buttons[index].action;
+                if (typeof action === "function") {
+                    action();
+                } else if (typeof action === "string" && action.length > 0) {
+                    Function(action)();
+                }
+            });
         });
 
         switch(this.type) {
@@ -181,6 +195,8 @@ class Modal {
     }
 }
 
-module.exports = {
-    Modal
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        Modal
+    };
+}

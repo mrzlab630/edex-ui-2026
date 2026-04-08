@@ -236,6 +236,8 @@ class LocationGlobe {
     }
 }
 
-module.exports = {
-    LocationGlobe
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        LocationGlobe
+    };
+}

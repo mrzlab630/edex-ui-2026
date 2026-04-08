@@ -2,8 +2,7 @@ class UpdateChecker {
     constructor() {
         let https = require("https");
         let electron = require("electron");
-        let remote = require("@electron/remote");
-        let current = remote.app.getVersion();
+        let current = window.edex.bootstrap.version;
 
         this._failed = false;
         this._willfail = false;
@@ -52,9 +51,15 @@ class UpdateChecker {
                             electron.ipcRenderer.send("log", "info", "UpdateChecker: Running an unreleased, development version.");
                         } else {
                             new Modal({
-                                type: "info",
+                                type: "custom",
                                 title: "New version available",
-                                message: `eDEX-UI <strong>${release.tag_name}</strong> is now available.<br/>Head over to <a href="#" onclick="require('electron').shell.openExternal('${release.html_url}')">github.com</a> to download the latest version.`
+                                html: `eDEX-UI <strong>${release.tag_name}</strong> is now available.<br/>Open the release page to download the latest build.`,
+                                buttons: [
+                                    {
+                                        label: "Open Release Page",
+                                        action: () => window.edex.shell.openExternal(release.html_url)
+                                    }
+                                ]
                             });
                             electron.ipcRenderer.send("log", "info", `UpdateChecker: New version ${release.tag_name} available.`);
                         }
@@ -69,6 +74,8 @@ class UpdateChecker {
     }
 }
 
-module.exports = {
-    UpdateChecker
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        UpdateChecker
+    };
+}

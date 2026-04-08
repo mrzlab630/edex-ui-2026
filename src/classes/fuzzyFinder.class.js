@@ -18,7 +18,7 @@ class FuzzyFinder {
                     <li></li>
                 </ul>`,
             buttons: [
-                {label: "Select", action: "window.activeFuzzyFinder.submit()"}
+                {label: "Select", action: () => window.activeFuzzyFinder.submit()}
             ]
         }, () => {
             delete window.activeFuzzyFinder;
@@ -28,6 +28,17 @@ class FuzzyFinder {
         
         this.input = document.getElementById("fuzzyFinder");
         this.results = document.getElementById("fuzzyFinder-results");
+        this.results.addEventListener("click", e => {
+            let selectedItem = e.target.closest("li[id^='fuzzyFinderMatch-']");
+            if (!selectedItem) {
+                return;
+            }
+            let current = this.results.querySelector("li.fuzzyFinderMatchSelected");
+            if (current) {
+                current.removeAttribute("class");
+            }
+            selectedItem.setAttribute("class", "fuzzyFinderMatchSelected");
+        });
         
         this.input.addEventListener('input', e => {
             if ((e.inputType && e.inputType.startsWith("delete")) || (e.detail && e.detail.startsWith("delete"))) {
@@ -107,7 +118,7 @@ class FuzzyFinder {
          }
          let html = "";
          results.forEach((file, i) => {
-             html += `<li id="fuzzyFinderMatch-${i}" class="${(i === 0) ? 'fuzzyFinderMatchSelected' : ''}" onclick="document.querySelector('li.fuzzyFinderMatchSelected').removeAttribute('class');document.getElementById('fuzzyFinderMatch-${i}').setAttribute('class', 'fuzzyFinderMatchSelected')">${file.name}</li>`;
+             html += `<li id="fuzzyFinderMatch-${i}" class="${(i === 0) ? 'fuzzyFinderMatchSelected' : ''}">${file.name}</li>`;
         });
         if (results.length !== 5) {
             for (let i = results.length; i < 5; i++) {
@@ -130,6 +141,8 @@ class FuzzyFinder {
      }
 }
 
-module.exports = {
-    FuzzyFinder
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        FuzzyFinder
+    };
+}

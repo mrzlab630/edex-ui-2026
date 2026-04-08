@@ -1,5 +1,5 @@
 const signale = require("signale");
-const {app, BrowserWindow, dialog, shell} = require("electron");
+const {app, BrowserWindow, dialog, globalShortcut, shell} = require("electron");
 
 process.on("uncaughtException", e => {
     signale.fatal(e);
@@ -30,16 +30,155 @@ if (!gotLock) {
 signale.time("Startup");
 
 const electron = require("electron");
-require('@electron/remote/main').initialize()
 const ipc = electron.ipcMain;
 const path = require("path");
 const url = require("url");
 const fs = require("fs");
+const {shellEnv} = require("shell-env");
 const which = require("which");
 const Terminal = require("./classes/terminal.class.js").Terminal;
 
+function parseShellArgs(value) {
+    if (Array.isArray(value)) {
+        return value;
+    }
+    if (typeof value !== "string" || value.trim().length === 0) {
+        return [];
+    }
+
+    return (value.match(/"[^"]*"|'[^']*'|[^\s]+/g) || []).map(arg => {
+        if ((arg.startsWith("\"") && arg.endsWith("\"")) || (arg.startsWith("'") && arg.endsWith("'"))) {
+            return arg.slice(1, -1);
+        }
+        return arg;
+    });
+}
+
 ipc.on("log", (e, type, content) => {
     signale[type](content);
+});
+
+ipc.on("bootstrap:get-sync", e => {
+    e.returnValue = {
+        argv: process.argv,
+        displayCount: electron.screen.getAllDisplays().length,
+        userDataPath: app.getPath("userData"),
+        version: app.getVersion()
+    };
+});
+
+ipc.handle("app:focus", () => {
+    app.focus({steal: true});
+});
+
+ipc.handle("app:quit", () => {
+    app.quit();
+});
+
+ipc.handle("app:relaunch", () => {
+    app.relaunch();
+    app.quit();
+});
+
+ipc.handle("shell:openExternal", (e, target) => {
+    return shell.openExternal(target);
+});
+
+ipc.handle("shell:openPath", (e, target) => {
+    return shell.openPath(target);
+});
+
+ipc.handle("window:minimize", e => {
+    let targetWindow = BrowserWindow.fromWebContents(e.sender);
+    if (targetWindow) {
+        targetWindow.minimize();
+    }
+});
+
+ipc.handle("window:toggleDevTools", e => {
+    let targetWindow = BrowserWindow.fromWebContents(e.sender);
+    if (targetWindow) {
+        targetWindow.webContents.toggleDevTools();
+    }
+});
+
+ipc.handle("window:getState", e => {
+    let targetWindow = BrowserWindow.fromWebContents(e.sender);
+    if (!targetWindow) {
+        return {
+            isFullScreen: false,
+            isMaximized: false,
+            size: [0, 0]
+        };
+    }
+    return {
+        isFullScreen: targetWindow.isFullScreen(),
+        isMaximized: targetWindow.isMaximized(),
+        size: targetWindow.getSize()
+    };
+});
+
+ipc.handle("window:setFullScreen", (e, useFullScreen) => {
+    let targetWindow = BrowserWindow.fromWebContents(e.sender);
+    if (targetWindow) {
+        targetWindow.setFullScreen(Boolean(useFullScreen));
+    }
+});
+
+ipc.handle("window:setSize", (e, width, height) => {
+    let targetWindow = BrowserWindow.fromWebContents(e.sender);
+    if (targetWindow) {
+        targetWindow.setSize(Number(width), Number(height));
+    }
+});
+
+ipc.handle("window:unmaximize", e => {
+    let targetWindow = BrowserWindow.fromWebContents(e.sender);
+    if (targetWindow) {
+        targetWindow.unmaximize();
+    }
+});
+
+ipc.handle("shortcuts:registerAll", (e, shortcuts) => {
+    const sender = e.sender;
+    globalShortcut.unregisterAll();
+    shortcuts.forEach(cut => {
+        if (!cut.enabled) {
+            return;
+        }
+
+        if (cut.type === "app") {
+            if (cut.action === "TAB_X") {
+                for (let i = 1; i <= 5; i++) {
+                    let trigger = cut.trigger.replace("X", i);
+                    globalShortcut.register(trigger, () => {
+                        if (!sender.isDestroyed()) {
+                            sender.send("shortcut:app-action", `TAB_${i}`);
+                        }
+                    });
+                }
+            } else {
+                globalShortcut.register(cut.trigger, () => {
+                    if (!sender.isDestroyed()) {
+                        sender.send("shortcut:app-action", cut.action);
+                    }
+                });
+            }
+        } else if (cut.type === "shell") {
+            globalShortcut.register(cut.trigger, () => {
+                if (!sender.isDestroyed()) {
+                    sender.send("shortcut:shell-action", {
+                        action: cut.action,
+                        linebreak: Boolean(cut.linebreak)
+                    });
+                }
+            });
+        }
+    });
+});
+
+ipc.handle("shortcuts:unregisterAll", () => {
+    globalShortcut.unregisterAll();
 });
 
 var win, tty, extraTtys;
@@ -192,7 +331,7 @@ function createWindow(settings) {
         backgroundColor: '#000000',
         webPreferences: {
             devTools: true,
-	    enableRemoteModule: true,
+            preload: path.join(__dirname, "preload.js"),
             contextIsolation: false,
             backgroundThrottling: false,
             webSecurity: true,
@@ -211,6 +350,16 @@ function createWindow(settings) {
 
     signale.complete("Frontend window created!");
     win.show();
+    win.on("resize", () => {
+        if (!win.webContents.isDestroyed()) {
+            win.webContents.send("window:resize");
+        }
+    });
+    win.on("leave-full-screen", () => {
+        if (!win.webContents.isDestroyed()) {
+            win.webContents.send("window:leave-full-screen");
+        }
+    });
     if (!settings.allowWindowed) {
         win.setResizable(false);
     } else if (!require(lastWindowStateFile)["useFullscreen"]) {
@@ -231,7 +380,7 @@ app.on('ready', async () => {
     if (!require("fs").existsSync(settings.cwd)) throw new Error("Configured cwd path does not exist.");
 
     // See #366
-    let cleanEnv = await require("shell-env")(settings.shell).catch(e => { throw e; });
+    let cleanEnv = await shellEnv(settings.shell).catch(e => { throw e; });
 
     Object.assign(cleanEnv, {
         TERM: "xterm-256color",
@@ -244,7 +393,7 @@ app.on('ready', async () => {
     tty = new Terminal({
         role: "server",
         shell: settings.shell,
-        params: settings.shellArgs || '',
+        params: parseShellArgs(settings.shellArgs),
         cwd: settings.cwd,
         env: cleanEnv,
         port: settings.port || 3000
@@ -299,7 +448,7 @@ app.on('ready', async () => {
             let term = new Terminal({
                 role: "server",
                 shell: settings.shell,
-                params: settings.shellArgs || '',
+                params: parseShellArgs(settings.shellArgs),
                 cwd: tty.tty._cwd || settings.cwd,
                 env: cleanEnv,
                 port: port
@@ -348,9 +497,9 @@ app.on('ready', async () => {
 
 app.on('web-contents-created', (e, contents) => {
     // Prevent creating more than one window
-    contents.on('new-window', (e, url) => {
-        e.preventDefault();
+    contents.setWindowOpenHandler(({url}) => {
         shell.openExternal(url);
+        return {action: "deny"};
     });
 
     // Prevent loading something else than the UI

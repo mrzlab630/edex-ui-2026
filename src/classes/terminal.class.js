@@ -3,11 +3,10 @@ class Terminal {
         if (opts.role === "client") {
             if (!opts.parentId) throw "Missing options";
 
-            this.xTerm = require("xterm").Terminal;
-            const {AttachAddon} = require("xterm-addon-attach");
-            const {FitAddon} = require("xterm-addon-fit");
-            const {LigaturesAddon} = require("xterm-addon-ligatures");
-            const {WebglAddon} = require("xterm-addon-webgl");
+            this.xTerm = require("@xterm/xterm").Terminal;
+            const {AttachAddon} = require("@xterm/addon-attach");
+            const {FitAddon} = require("@xterm/addon-fit");
+            const {WebglAddon} = require("@xterm/addon-webgl");
             this.Ipc = require("electron").ipcRenderer;
 
             this.port = opts.port || 3000;
@@ -72,7 +71,8 @@ class Terminal {
                 });
             }
 
-            let color = require("color");
+            const colorModule = require("color");
+            let color = colorModule.default || colorModule;
             let colorify;
             if (doCustomFilter) {
                 colorify = (base, target) => {
@@ -139,14 +139,19 @@ class Terminal {
             this.term.loadAddon(fitAddon);
             this.term.open(document.getElementById(opts.parentId));
             this.term.loadAddon(new WebglAddon());
-            let ligaturesAddon = new LigaturesAddon();
-            this.term.loadAddon(ligaturesAddon);
+            import("../node_modules/@xterm/addon-ligatures/lib/addon-ligatures.mjs").then(({LigaturesAddon}) => {
+                this.term.loadAddon(new LigaturesAddon());
+            }).catch(error => {
+                this.Ipc.send("log", "warn", `Ligatures addon disabled: ${error.message}`);
+            });
             this.term.attachCustomKeyEventHandler(e => {
                 window.keyboard.keydownHandler(e);
                 return true;
             });
+            const parent = document.getElementById(opts.parentId);
+            const helperTextarea = parent.querySelector(".xterm-helper-textarea");
             // Prevent soft-keyboard on touch devices #733
-            document.querySelectorAll('.xterm-helper-textarea').forEach(textarea => textarea.setAttribute('readonly', 'readonly'))
+            parent.querySelectorAll(".xterm-helper-textarea").forEach(textarea => textarea.setAttribute("readonly", "readonly"));
             this.term.focus();
 
             this.Ipc.send("terminal_channel-"+this.port, "Renderer startup");
@@ -213,7 +218,6 @@ class Terminal {
                 }
             });
 
-            let parent = document.getElementById(opts.parentId);
             parent.addEventListener("wheel", e => {
                 this.term.scrollLines(Math.round(e.deltaY/10));
             });
@@ -236,16 +240,22 @@ class Terminal {
                 this._lastTouch = null;
             });
 
-            document.querySelector(".xterm-helper-textarea").addEventListener("keydown", e => {
-                if (e.key === "F11" && window.settings.allowWindowed) {
-                    e.preventDefault();
-                    window.toggleFullScreen();
-                }
-            });
+            if (helperTextarea) {
+                helperTextarea.addEventListener("keydown", e => {
+                    if (e.key === "F11" && window.settings.allowWindowed) {
+                        e.preventDefault();
+                        window.toggleFullScreen();
+                    }
+                });
+            }
 
             this.fit = () => {
                 this.lastRefit = Date.now();
-                let {cols, rows} = fitAddon.proposeDimensions();
+                let proposed = fitAddon.proposeDimensions();
+                if (!proposed || !proposed.cols || !proposed.rows) {
+                    return;
+                }
+                let {cols, rows} = proposed;
 
                 // Apply custom fixes based on screen ratio, see #302
                 let w = screen.width;
@@ -293,7 +303,7 @@ class Terminal {
                     this.clipboard.didCopy = true;
                 },
                 paste: () => {
-                    this.write(remote.clipboard.readText());
+                    this.write(window.edex.clipboard.readText());
                     this.clipboard.didCopy = false;
                 },
                 didCopy: false
@@ -406,7 +416,8 @@ class Terminal {
                 }
             }, 1000);
 
-            this.tty = this.Pty.spawn(opts.shell || "bash", (opts.params.length > 0 ? opts.params : (process.platform === "win32" ? [] : ["--login"])), {
+            const params = Array.isArray(opts.params) ? opts.params : [];
+            this.tty = this.Pty.spawn(opts.shell || "bash", (params.length > 0 ? params : (process.platform === "win32" ? [] : ["--login"])), {
                 name: opts.env.TERM || "xterm-256color",
                 cols: 80,
                 rows: 24,
@@ -484,6 +495,8 @@ class Terminal {
     }
 }
 
-module.exports = {
-    Terminal
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        Terminal
+    };
+}

@@ -20,6 +20,8 @@
 
 eDEX-UI is a fullscreen, cross-platform terminal emulator and system monitor that looks and feels like a sci-fi computer interface.
 
+> Fork status, April 2026: upstream `GitSquared/edex-ui` remains archived, but this fork is active again and has been moved to a modern runtime baseline. The project now runs on a current Electron stack, updated package graph, and refreshed compatibility layer while deeper security hardening and renderer isolation work continues.
+
 ---
 
 <a href="https://youtu.be/BGeY1rK19zA">
@@ -89,7 +91,7 @@ Sadly, this is technically impossible to do on Windows right now, so the file br
 #### Can this run on a Raspberry Pi / ARM device?
 We provide prebuilt arm64 builds. For other platforms, see [this issue comment](https://github.com/GitSquared/edex-ui/issues/313#issuecomment-443465345), and the thread on issue [#818](https://github.com/GitSquared/edex-ui/issues/818).
 #### Is this repo actively maintained?
-No, after a 3 years run, this project has been archived. See the [announcement](https://github.com/GitSquared/edex-ui/releases/tag/v2.2.8).
+The original upstream repository was archived in October 2021. This fork, `mrzlab630/edex-ui-2026`, is being actively revived and modernized for a 2026-era dependency and runtime stack.
 #### How did you make this?
 Glad you're interested! See [#272](https://github.com/GitSquared/edex-ui/issues/272).
 #### This is so cool.
@@ -120,12 +122,19 @@ Thanks! If you feel like it, you can [follow me on Twitter](https://gaby.dev/twi
 
 ## Useful commands for the nerds
 
+### 2026 modernization snapshot
+- Runtime baseline updated to current Electron and Node-compatible dependencies.
+- Source startup has been verified on Electron 41 in April 2026.
+- Packaging has been verified for Linux `x64`, `arm64`, and `armv7l` on the current host.
+- `ia32` packaging still depends on host multilib headers and is not guaranteed on every Linux build machine.
+
 **IMPORTANT NOTE:** the following instructions are meant for running eDEX from the latest unoptimized, unreleased, development version. If you'd like to get stable software instead, refer to [these](#how-do-i-get-it) instructions.
 
 #### Starting from source:
 on *nix systems (You'll need the Xcode command line tools on macOS):
 - clone the repository
-- `npm run install-linux`
+- `npm install`
+- `cd src && npm install && cd ..`
 - `npm run start`
 
 on Windows:
@@ -138,6 +147,7 @@ on Windows:
 Note: Due to native modules, you can only build targets for the host OS you are using.
 
 - `npm install` (NOT `install-linux` or `install-windows`)
+- `cd src && npm install && cd ..`
 - `npm run build-linux` or `build-windows` or `build-darwin`
 
 The script will minify the source code, recompile native dependencies and create distributable assets in the `dist` folder.

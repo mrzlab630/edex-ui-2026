@@ -68,6 +68,8 @@ class AudioManager {
     }
 }
 
-module.exports = {
-    AudioManager
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        AudioManager
+    };
+}

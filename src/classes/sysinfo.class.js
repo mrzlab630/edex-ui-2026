@@ -134,6 +134,8 @@ class Sysinfo {
     }
 }
 
-module.exports = {
-    Sysinfo
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        Sysinfo
+    };
+}

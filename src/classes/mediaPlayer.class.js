@@ -177,6 +177,8 @@ class MediaPlayer {
     }
 }
 
-module.exports = {
-    MediaPlayer
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        MediaPlayer
+    };
+}

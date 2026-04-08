@@ -46,6 +46,8 @@ class HardwareInspector {
     }
 }
 
-module.exports = {
-    HardwareInspector
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        HardwareInspector
+    };
+}

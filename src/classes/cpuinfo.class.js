@@ -185,6 +185,8 @@ class Cpuinfo {
     }
 }
 
-module.exports = {
-    Cpuinfo
-};
+if (typeof module !== "undefined") {
+    module.exports = {
+        Cpuinfo
+    };
+}
