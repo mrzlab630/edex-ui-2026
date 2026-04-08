@@ -1,0 +1,13 @@
+[package]
+name = "session-broker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+core-domain = { path = "../core-domain" }
+core-state = { path = "../core-state" }
+thiserror.workspace = true
+tmux-bridge = { path = "../tmux-bridge" }
+uuid.workspace = true

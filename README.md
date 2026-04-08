@@ -22,6 +22,8 @@ eDEX-UI is a fullscreen, cross-platform terminal emulator and system monitor tha
 
 > Fork status, April 2026: upstream `GitSquared/edex-ui` remains archived, but this fork is active again and has been moved to a modern runtime baseline. The project now runs on a current Electron stack, updated package graph, and refreshed compatibility layer while deeper security hardening and renderer isolation work continues.
 
+> Rust-core status, April 2026: branch `rust-core` now contains a verified Linux-first headless core for the next-generation system. It already covers daemon/API transport, encrypted state/history, context retrieval, file indexing, tmux-backed sessions, SSH config ingest, recovery bundles, and a core-tier AI provider boundary via `claw`.
+
 ---
 
 <a href="https://youtu.be/BGeY1rK19zA">
@@ -127,6 +129,13 @@ Thanks! If you feel like it, you can [follow me on Twitter](https://gaby.dev/twi
 - Source startup has been verified on Electron 41 in April 2026.
 - Packaging has been verified for Linux `x64`, `arm64`, and `armv7l` on the current host.
 - `ia32` packaging still depends on host multilib headers and is not guaranteed on every Linux build machine.
+
+### rust-core snapshot
+- Active branch: `rust-core`
+- Scope: Linux-first headless core, no UI crates yet
+- Verified: `cargo check`, `cargo test`, `cargo clippy`, and host-side `host_acceptance`
+- Core slices already landed: workspaces, sessions, tmux, SSH config import, encrypted state/history, context search, workspace-scoped file access, streamed recovery bundles, and `claw` provider integration
+- Current next step: thin client layer on top of the daemon API, starting with TUI
 
 **IMPORTANT NOTE:** the following instructions are meant for running eDEX from the latest unoptimized, unreleased, development version. If you'd like to get stable software instead, refer to [these](#how-do-i-get-it) instructions.
 

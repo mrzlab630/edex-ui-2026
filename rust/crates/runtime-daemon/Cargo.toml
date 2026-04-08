@@ -1,0 +1,28 @@
+[package]
+name = "runtime-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+claw-bridge = { path = "../claw-bridge" }
+context-engine = { path = "../context-engine" }
+core-domain = { path = "../core-domain" }
+core-policy = { path = "../core-policy" }
+core-state = { path = "../core-state" }
+file-index = { path = "../file-index" }
+history-store = { path = "../history-store" }
+recovery-manager = { path = "../recovery-manager" }
+runtime-api = { path = "../runtime-api" }
+secrets-store = { path = "../secrets-store" }
+session-broker = { path = "../session-broker" }
+secrecy.workspace = true
+serde_json.workspace = true
+ssh-bridge = { path = "../ssh-bridge" }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tmux-bridge = { path = "../tmux-bridge" }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true

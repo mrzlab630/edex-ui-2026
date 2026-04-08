@@ -42,3 +42,7 @@ jspm_packages
 dist
 prebuild-src
 src/node_modules
+.claw/
+rust/target/
+rust/.s/
+rust/crates/*/.tmp/

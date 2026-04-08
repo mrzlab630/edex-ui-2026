@@ -1,0 +1,13 @@
+[package]
+name = "claw-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+core-domain = { path = "../core-domain" }
+thiserror.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true

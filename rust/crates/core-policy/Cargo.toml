@@ -1,0 +1,11 @@
+[package]
+name = "core-policy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+core-domain = { path = "../core-domain" }
+serde.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,14 @@
+[package]
+name = "history-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+core-domain = { path = "../core-domain" }
+rusqlite.workspace = true
+secrets-store = { path = "../secrets-store" }
+secrecy.workspace = true
+uuid.workspace = true
+thiserror.workspace = true

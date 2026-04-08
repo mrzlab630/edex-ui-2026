@@ -1,0 +1,43 @@
+[workspace]
+members = [
+  "crates/claw-bridge",
+  "crates/core-domain",
+  "crates/core-events",
+  "crates/core-policy",
+  "crates/core-state",
+  "crates/context-engine",
+  "crates/history-store",
+  "crates/file-index",
+  "crates/secrets-store",
+  "crates/recovery-manager",
+  "crates/runtime-api",
+  "crates/runtime-daemon",
+  "crates/session-broker",
+  "crates/tmux-bridge",
+  "crates/ssh-bridge",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.85"
+
+[workspace.dependencies]
+age = "0.11"
+anyhow = "1.0"
+base64 = "0.22"
+blake3 = "1.8"
+rusqlite = { version = "0.39", default-features = false, features = ["bundled"] }
+secrecy = "0.10"
+secret-service = { version = "5.1", features = ["rt-tokio-crypto-rust"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tokio = { version = "1.50", default-features = false }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "std"] }
+uuid = { version = "1.18", features = ["serde", "v4"] }
+zeroize = { version = "1.8", features = ["zeroize_derive"] }

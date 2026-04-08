@@ -1,0 +1,19 @@
+[package]
+name = "recovery-manager"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+core-domain = { path = "../core-domain" }
+core-state = { path = "../core-state" }
+runtime-api = { path = "../runtime-api" }
+secrets-store = { path = "../secrets-store" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+secrecy.workspace = true
+uuid.workspace = true
