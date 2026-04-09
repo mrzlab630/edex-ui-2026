@@ -145,6 +145,7 @@ pub enum AgentPermissionMode {
 pub struct AgentTask {
     pub id: AgentTaskId,
     pub workspace_id: WorkspaceId,
+    pub session_id: Option<SessionId>,
     pub provider: AgentProviderKind,
     pub cwd: PathBuf,
     pub prompt: String,
@@ -159,6 +160,7 @@ pub struct AgentTask {
 pub struct AgentTaskDraft {
     pub id: AgentTaskId,
     pub workspace_id: WorkspaceId,
+    pub session_id: Option<SessionId>,
     pub cwd: PathBuf,
     pub prompt: String,
     pub model: Option<String>,
@@ -191,6 +193,7 @@ impl AgentTask {
         Ok(Self {
             id: draft.id,
             workspace_id: draft.workspace_id,
+            session_id: draft.session_id,
             provider: AgentProviderKind::Claw,
             cwd,
             prompt,
@@ -380,6 +383,7 @@ mod tests {
         let error = AgentTask::new(AgentTaskDraft {
             id: Uuid::new_v4(),
             workspace_id: Uuid::new_v4(),
+            session_id: None,
             cwd: "/workspace".into(),
             prompt: "   ".into(),
             model: None,
@@ -398,6 +402,7 @@ mod tests {
         let error = AgentTask::new(AgentTaskDraft {
             id: Uuid::new_v4(),
             workspace_id: Uuid::new_v4(),
+            session_id: None,
             cwd: "/workspace".into(),
             prompt: "summarize recent failures".into(),
             model: None,
@@ -416,6 +421,7 @@ mod tests {
         let task = AgentTask::new(AgentTaskDraft {
             id: Uuid::new_v4(),
             workspace_id: Uuid::new_v4(),
+            session_id: Some(Uuid::new_v4()),
             cwd: "/workspace".into(),
             prompt: "summarize recent failures".into(),
             model: Some(" claude-opus-4-6 ".into()),
@@ -428,6 +434,7 @@ mod tests {
 
         assert_eq!(task.model.as_deref(), Some("claude-opus-4-6"));
         assert_eq!(task.context_query.as_deref(), Some("cargo test"));
+        assert!(task.session_id.is_some());
         assert_eq!(
             task.allowed_tools,
             vec!["glob".to_string(), "read".to_string()]

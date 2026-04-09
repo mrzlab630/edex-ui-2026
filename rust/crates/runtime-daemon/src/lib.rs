@@ -20,7 +20,7 @@ use recovery_manager::{
 use runtime_api::{
     decode_json_frame, encode_json_frame, ApiError, Command, DaemonInfo, ErrorCode, FrameError,
     HealthSnapshot, Query, RequestEnvelope, ResponseEnvelope, ResponsePayload, RuntimeStatus,
-    SshDynamicForward, SshHostProfile, SshTcpForward,
+    SshDynamicForward, SshHostProfile, SshTcpForward, WorkspaceSummary,
 };
 use secrets_store::SecretsStore;
 use session_broker::{
@@ -61,6 +61,7 @@ pub struct DaemonState {
 struct AgentExecutionRequest {
     task_id: uuid::Uuid,
     workspace_id: uuid::Uuid,
+    session_id: Option<uuid::Uuid>,
     cwd: Option<PathBuf>,
     prompt: String,
     model: Option<String>,
@@ -385,6 +386,29 @@ impl DaemonState {
         Ok(workspace.roots.clone())
     }
 
+    async fn workspaces(&self) -> Vec<WorkspaceSummary> {
+        self.store
+            .read()
+            .await
+            .workspaces()
+            .into_iter()
+            .map(|workspace| WorkspaceSummary {
+                id: workspace.id,
+                name: workspace.name,
+                roots: workspace
+                    .roots
+                    .into_iter()
+                    .map(|path| path.display().to_string())
+                    .collect(),
+                bookmarks: workspace
+                    .bookmarks
+                    .into_iter()
+                    .map(|path| path.display().to_string())
+                    .collect(),
+            })
+            .collect()
+    }
+
     async fn agent_provider_status(&self) -> runtime_api::AgentProviderStatus {
         let Some(provider) = self.claw.clone() else {
             return runtime_api::AgentProviderStatus {
@@ -438,7 +462,7 @@ impl DaemonState {
         let context_results = self
             .context_search(
                 Some(task.workspace_id),
-                None,
+                task.session_id,
                 task.context_query
                     .clone()
                     .unwrap_or_else(|| task.prompt.clone()),
@@ -467,7 +491,7 @@ impl DaemonState {
             HistoryEntry::new(
                 uuid::Uuid::new_v4(),
                 task.workspace_id,
-                None,
+                task.session_id,
                 HistoryEntryKind::ChatUser,
                 at_unix_ms,
                 task.prompt.clone(),
@@ -481,7 +505,7 @@ impl DaemonState {
                 HistoryEntry::new(
                     uuid::Uuid::new_v4(),
                     task.workspace_id,
-                    None,
+                    task.session_id,
                     HistoryEntryKind::ChatAgent,
                     at_unix_ms.saturating_add(1),
                     output.clone(),
@@ -510,9 +534,32 @@ impl DaemonState {
                 return Err(policy_error_to_api(PolicyError::NoWorkspaceRoots));
             }
 
+            let session_cwd = match request.session_id {
+                Some(session_id) => {
+                    let session = store.session(session_id).ok_or_else(|| {
+                        ApiError::new(
+                            ErrorCode::NotFound,
+                            format!("session `{session_id}` is not registered"),
+                        )
+                    })?;
+                    if session.workspace_id != request.workspace_id {
+                        return Err(ApiError::new(
+                            ErrorCode::ValidationFailed,
+                            format!(
+                                "session `{session_id}` does not belong to workspace `{}`",
+                                request.workspace_id
+                            ),
+                        ));
+                    }
+                    Some(session.cwd.clone())
+                }
+                None => None,
+            };
+
             let cwd = request
                 .cwd
                 .clone()
+                .or(session_cwd)
                 .or_else(|| workspace.roots.first().cloned())
                 .ok_or_else(|| policy_error_to_api(PolicyError::NoWorkspaceRoots))?;
             let cwd = canonicalize_host_path(&cwd).map_err(file_index_error_to_api)?;
@@ -523,6 +570,7 @@ impl DaemonState {
         AgentTask::new(AgentTaskDraft {
             id: request.task_id,
             workspace_id: request.workspace_id,
+            session_id: request.session_id,
             cwd,
             prompt: request.prompt.clone(),
             model: request.model.clone(),
@@ -896,6 +944,7 @@ async fn handle_command(
         Command::RunAgentTask {
             task_id,
             workspace_id,
+            session_id,
             cwd,
             prompt,
             model,
@@ -907,6 +956,7 @@ async fn handle_command(
             .run_agent_task(AgentExecutionRequest {
                 task_id,
                 workspace_id,
+                session_id,
                 cwd: cwd.map(PathBuf::from),
                 prompt,
                 model,
@@ -1134,6 +1184,10 @@ async fn handle_query(state: &DaemonState, request_id: String, query: Query) -> 
         Query::AgentProviderStatus => {
             let status = state.agent_provider_status().await;
             ResponseEnvelope::ok(request_id, ResponsePayload::AgentProviderStatus { status })
+        }
+        Query::Workspaces => {
+            let workspaces = state.workspaces().await;
+            ResponseEnvelope::ok(request_id, ResponsePayload::Workspaces { workspaces })
         }
         Query::RecentHistory {
             workspace_id,
@@ -1456,6 +1510,9 @@ fn build_agent_prompt(task: &AgentTask, context_results: &[ContextResult]) -> St
     let mut prompt = String::new();
     prompt.push_str("You are operating inside the eDEX-UI 2026 rust-core agent runtime.\n");
     prompt.push_str(&format!("Workspace ID: {}\n", task.workspace_id));
+    if let Some(session_id) = task.session_id {
+        prompt.push_str(&format!("Session ID: {session_id}\n"));
+    }
     prompt.push_str(&format!("Working directory: {}\n", task.cwd.display()));
     if let Some(query) = task.context_query.as_deref() {
         prompt.push_str(&format!("Context query: {query}\n"));
@@ -1833,7 +1890,9 @@ mod tests {
     async fn agent_provider_status_and_task_roundtrip() -> Result<()> {
         let script_dir = test_dir("agent-roundtrip");
         let workspace_root = script_dir.join("workspace");
+        let session_root = workspace_root.join("session");
         fs::create_dir_all(&workspace_root)?;
+        fs::create_dir_all(&session_root)?;
         let script_path = script_dir.join("claw");
         write_fake_claw(
             &script_path,
@@ -1879,6 +1938,26 @@ esac
             ResponsePayload::WorkspaceRegistered { workspace_count: 1 }
         ));
 
+        let session_id = Uuid::new_v4();
+        let register_session = handle_request(
+            &state,
+            RequestEnvelope::command(
+                "req-session",
+                Command::RegisterSession {
+                    session_id,
+                    workspace_id,
+                    kind: core_domain::SessionKind::Local,
+                    backing: core_domain::SessionBacking::LocalPty,
+                    cwd: session_root.display().to_string(),
+                },
+            ),
+        )
+        .await;
+        assert!(matches!(
+            register_session.payload,
+            ResponsePayload::SessionRegistered { .. }
+        ));
+
         let agent_status = handle_request(
             &state,
             RequestEnvelope::query("req-agent-status", Query::AgentProviderStatus),
@@ -1900,7 +1979,8 @@ esac
                 Command::RunAgentTask {
                     task_id: Uuid::new_v4(),
                     workspace_id,
-                    cwd: Some(workspace_root.display().to_string()),
+                    session_id: Some(session_id),
+                    cwd: None,
                     prompt: "summarize recent failures".into(),
                     model: Some("claude-opus-4-6".into()),
                     context_query: Some("recent failures".into()),
@@ -1920,7 +2000,8 @@ esac
                 history_count,
             } => {
                 assert_eq!(task.workspace_id, workspace_id);
-                assert_eq!(task.cwd, workspace_root);
+                assert_eq!(task.session_id, Some(session_id));
+                assert_eq!(task.cwd, session_root);
                 assert!(output.contains("agent-output"));
                 assert!(output.contains("--permission-mode workspace-write"));
                 assert_eq!(context_result_count, 0);
@@ -1935,7 +2016,7 @@ esac
                 "req-history",
                 Query::RecentHistory {
                     workspace_id: Some(workspace_id),
-                    session_id: None,
+                    session_id: Some(session_id),
                     limit: 10,
                 },
             ),
@@ -1945,6 +2026,9 @@ esac
         match recent_history.payload {
             ResponsePayload::HistoryEntries { entries } => {
                 assert_eq!(entries.len(), 2);
+                assert!(entries
+                    .iter()
+                    .all(|entry| entry.session_id == Some(session_id)));
                 assert!(entries
                     .iter()
                     .any(|entry| entry.kind == HistoryEntryKind::ChatUser));
@@ -1990,6 +2074,7 @@ esac
                 Command::RunAgentTask {
                     task_id: Uuid::new_v4(),
                     workspace_id,
+                    session_id: None,
                     cwd: Some(workspace_root.display().to_string()),
                     prompt: "try dangerous mode".into(),
                     model: None,
@@ -2047,6 +2132,7 @@ esac
             .build_agent_task(&AgentExecutionRequest {
                 task_id: Uuid::new_v4(),
                 workspace_id,
+                session_id: None,
                 cwd: Some(escaped_cwd),
                 prompt: "stay inside workspace".into(),
                 model: None,
@@ -2060,6 +2146,83 @@ esac
 
         assert_eq!(build_error.code, ErrorCode::ValidationFailed);
         assert!(build_error.message.contains("outside registered workspace roots"));
+
+        let _ = fs::remove_dir_all(root_dir);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn agent_task_rejects_session_from_other_workspace() -> Result<()> {
+        let root_dir = test_dir("agent-session-scope");
+        let workspace_a_root = root_dir.join("workspace-a");
+        let workspace_b_root = root_dir.join("workspace-b");
+        fs::create_dir_all(&workspace_a_root)?;
+        fs::create_dir_all(&workspace_b_root)?;
+
+        let state = Arc::new(DaemonState::new(PathBuf::from("test.sock")));
+        let workspace_a = Uuid::new_v4();
+        let workspace_b = Uuid::new_v4();
+        let session_id = Uuid::new_v4();
+
+        for (workspace_id, name, root) in [
+            (workspace_a, "alpha", &workspace_a_root),
+            (workspace_b, "beta", &workspace_b_root),
+        ] {
+            let response = handle_request(
+                &state,
+                RequestEnvelope::command(
+                    format!("req-workspace-{name}"),
+                    Command::RegisterWorkspace {
+                        workspace_id,
+                        name: name.into(),
+                        roots: vec![root.display().to_string()],
+                    },
+                ),
+            )
+            .await;
+            assert!(matches!(
+                response.payload,
+                ResponsePayload::WorkspaceRegistered { .. }
+            ));
+        }
+
+        let session_response = handle_request(
+            &state,
+            RequestEnvelope::command(
+                "req-session",
+                Command::RegisterSession {
+                    session_id,
+                    workspace_id: workspace_a,
+                    kind: core_domain::SessionKind::Local,
+                    backing: core_domain::SessionBacking::LocalPty,
+                    cwd: workspace_a_root.display().to_string(),
+                },
+            ),
+        )
+        .await;
+        assert!(matches!(
+            session_response.payload,
+            ResponsePayload::SessionRegistered { .. }
+        ));
+
+        let error = state
+            .build_agent_task(&AgentExecutionRequest {
+                task_id: Uuid::new_v4(),
+                workspace_id: workspace_b,
+                session_id: Some(session_id),
+                cwd: None,
+                prompt: "should fail".into(),
+                model: None,
+                context_query: None,
+                context_limit: 3,
+                permission_mode: AgentPermissionMode::ReadOnly,
+                allowed_tools: vec!["read".into()],
+            })
+            .await
+            .expect_err("cross-workspace session must be denied");
+
+        assert_eq!(error.code, ErrorCode::ValidationFailed);
+        assert!(error.message.contains("does not belong to workspace"));
 
         let _ = fs::remove_dir_all(root_dir);
         Ok(())

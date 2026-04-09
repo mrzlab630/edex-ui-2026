@@ -14,6 +14,7 @@ members = [
   "crates/runtime-daemon",
   "crates/session-broker",
   "crates/tmux-bridge",
+  "crates/tui-client",
   "crates/ssh-bridge",
 ]
 resolver = "2"
@@ -29,6 +30,7 @@ age = "0.11"
 anyhow = "1.0"
 base64 = "0.22"
 blake3 = "1.8"
+crossterm = "0.28"
 rusqlite = { version = "0.39", default-features = false, features = ["bundled"] }
 secrecy = "0.10"
 secret-service = { version = "5.1", features = ["rt-tokio-crypto-rust"] }

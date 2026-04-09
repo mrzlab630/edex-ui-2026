@@ -137,6 +137,15 @@ Thanks! If you feel like it, you can [follow me on Twitter](https://gaby.dev/twi
 - Core slices already landed: workspaces, sessions, tmux, SSH config import, encrypted state/history, context search, workspace-scoped file access, streamed recovery bundles, and `claw` provider integration
 - Current next step: thin client layer on top of the daemon API, starting with TUI
 
+### tui-client snapshot
+- Active branch: `tui-client`
+- Scope: Linux-first thin terminal client over the `rust-core` daemon API
+- Verified: `cargo check`, `cargo test`, `cargo clippy`, and host-side populated smoke
+- Current slices: workspace bootstrap, local tmux session create/remove, session-scoped history/context, session-aware agent tasks, file search, jump navigation, and an interactive development launcher
+- Fast local launch:
+  - `./scripts/run-tui-dev.sh`
+  - `./scripts/run-tui-dev.sh --smoke`
+
 **IMPORTANT NOTE:** the following instructions are meant for running eDEX from the latest unoptimized, unreleased, development version. If you'd like to get stable software instead, refer to [these](#how-do-i-get-it) instructions.
 
 #### Starting from source:

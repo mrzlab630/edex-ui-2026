@@ -182,6 +182,12 @@ impl CanonicalStore {
         self.workspaces.len()
     }
 
+    pub fn workspaces(&self) -> Vec<Workspace> {
+        let mut workspaces: Vec<_> = self.workspaces.values().cloned().collect();
+        workspaces.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
+        workspaces
+    }
+
     pub fn workspace_roots(&self) -> Vec<PathBuf> {
         let mut roots: Vec<_> = self
             .workspaces

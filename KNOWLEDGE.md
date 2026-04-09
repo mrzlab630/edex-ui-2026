@@ -3,6 +3,51 @@
 - **Reason:** Проект возобновляется после длительного перерыва, и нужна единая точка фиксации архитектурного состояния, рисков, решений и особенностей окружения.
 - **Context:** Пользователь поставил задачу возобновить развитие `edex-ui-2026` и привести проект в актуальное состояние на 2026 год.
 
+## [2026-04-08] TUI Branch Opened
+- **Decision:** Открыть отдельную ветку `tui-client` для первого thin UI adapter поверх `rust-core`, не меняя headless-first статус самого ядра.
+- **Reason:** Пользователь потребовал начать движение к UI, но центральная линия по-прежнему требует, чтобы `rust-core` оставался каноническим headless daemon, а конкретные интерфейсы развивались как отдельные клиенты.
+- **Context:** Создана ветка `tui-client`; подготовлен [TUI_CLIENT_PLAN.md](/home/mrz/projects/edex-ui-2026/TUI_CLIENT_PLAN.md); независимый Censor pass подтвердил ключевые риски boundary drift, missing workspace overview contract, слабые acceptance criteria и dependency creep.
+
+## [2026-04-08] First TUI Slice Landed
+- **Decision:** Реализовать первый TUI client как минимальный `crossterm`-only adapter без `ratatui` и без дополнительных state/rendering frameworks.
+- **Reason:** Это лучше соответствует принятой линии `minimize-first`, устраняет MSRV-конфликт цепочки `ratatui -> instability -> darling`, уменьшает dependency surface и делает код проще для последующего анализа ИИ-агентами.
+- **Context:** Добавлен crate [tui-client](/home/mrz/projects/edex-ui-2026/rust/crates/tui-client/Cargo.toml) с ручным ASCII layout renderer в [main.rs](/home/mrz/projects/edex-ui-2026/rust/crates/tui-client/src/main.rs); в [runtime-api/src/protocol.rs](/home/mrz/projects/edex-ui-2026/rust/crates/runtime-api/src/protocol.rs) добавлен daemon-owned `Workspaces` query и `WorkspaceSummary`; в [runtime-daemon/src/lib.rs](/home/mrz/projects/edex-ui-2026/rust/crates/runtime-daemon/src/lib.rs) выведен соответствующий handler; `runtime-api` теперь реэкспортирует wire-boundary types, чтобы TUI не тянул domain/storage crates напрямую.
+
+## [2026-04-08] TUI Probatio
+- **Decision:** Считать первый TUI milestone технически подтверждённым.
+- **Reason:** Получено как static proof, так и live host smoke через реальный daemon socket.
+- **Context:** `cargo check --workspace --all-targets`, `cargo test --workspace` и `cargo clippy --workspace --all-targets -- -D warnings` зелёные уже с новым `tui-client`; grep по [tui-client/src/main.rs](/home/mrz/projects/edex-ui-2026/rust/crates/tui-client/src/main.rs) не находит прямых `std::fs`, `rusqlite`, `Command::new`, `tmux`, `ssh`, `claw`; host-side live smoke выполнен через внешний запуск `runtime-daemon` на `/tmp/edex-ui-2026-tui.sock`, после чего `cargo run -p tui-client -- --smoke` вернул `TUI SMOKE OK`.
+
+## [2026-04-08] Populated TUI Slice Landed
+- **Decision:** Поднять следующий TUI vertical slice сразу до seeded interactive state, а не оставлять клиент в режиме "подключился к пустому daemon и вышел".
+- **Reason:** Для реальной полезности TUI должен уметь сам инициировать минимальное рабочее состояние через daemon boundary: создать workspace и локальную tmux-backed session без прямых subprocess/file/state обходов.
+- **Context:** В [tui-client/src/main.rs](/home/mrz/projects/edex-ui-2026/rust/crates/tui-client/src/main.rs) добавлены `register_workspace`, `register_local_tmux_session`, `remove_session`, keybindings `w` / `n` / `x`, и env-driven bootstrap `EDEX_TUI_BOOTSTRAP_ROOT` / `EDEX_TUI_BOOTSTRAP_TMUX`. Host-side populated smoke доказан через live daemon на `/tmp/edex-ui-2026-tui-cycle2.sock`: `cargo run -p tui-client -- --smoke` вернул `TUI SMOKE OK workspaces=1 sessions=1 files=26`.
+
+## [2026-04-08] Session-Aware TUI History And Context
+- **Decision:** Сделать history/context в TUI явно `scope-aware`, с переключением между workspace-level и selected-session-level view.
+- **Reason:** Без этого TUI оставался хорошим только как обзорщик панелей; для реальной навигации по сессиям и AI-assisted recall нужен был нормальный semantic scope поверх уже существующего daemon API `RecentHistory` / `ContextSearch`.
+- **Context:** В [tui-client/src/main.rs](/home/mrz/projects/edex-ui-2026/rust/crates/tui-client/src/main.rs) добавлен `HistoryScope`, keybinding `h`, session-aware filters для `RecentHistory` и `ContextSearch`, а `Enter` на session теперь переводит правую панель в session scope. После этих правок повторный host-side populated smoke по-прежнему зелёный: `TUI SMOKE OK workspaces=2 sessions=1 files=26` на persisted daemon state.
+
+## [2026-04-09] Session-Aware Agent Contract
+- **Decision:** Поднять `RunAgentTask` до полноценного `session-aware` контракта вместо скрытого workspace-only поведения.
+- **Reason:** После появления session-aware history/context оставалось логическое расхождение: агентные задачи всё ещё читали контекст только по workspace и записывали transcript без session binding. Это ломало ментальную модель TUI и мешало точной AI-работе по выбранной session.
+- **Context:** В [core-domain/src/lib.rs](/home/mrz/projects/edex-ui-2026/rust/crates/core-domain/src/lib.rs) `AgentTask` и `AgentTaskDraft` получили `session_id`; в [runtime-api/src/protocol.rs](/home/mrz/projects/edex-ui-2026/rust/crates/runtime-api/src/protocol.rs) `RunAgentTask` теперь несёт `session_id`; в [runtime-daemon/src/lib.rs](/home/mrz/projects/edex-ui-2026/rust/crates/runtime-daemon/src/lib.rs) агентный flow валидирует принадлежность session к workspace, использует session `cwd` как default, ограничивает context retrieval по `session_id` и пишет `ChatUser` / `ChatAgent` transcript entries с тем же `session_id`. В [tui-client/src/main.rs](/home/mrz/projects/edex-ui-2026/rust/crates/tui-client/src/main.rs) agent run теперь несёт active scope; `cargo test -p runtime-daemon`, `cargo test -p runtime-api`, `cargo test -p core-domain`, `cargo test -p tui-client` и `cargo clippy --workspace --all-targets -- -D warnings` зелёные.
+
+## [2026-04-09] TUI File Search And Stronger Metadata
+- **Decision:** Усилить TUI навигацию через локальный file search mode и сделать scope/session metadata явно видимыми в интерфейсе.
+- **Reason:** После bootstrap, session management и session-aware agent flow интерфейс всё ещё отставал по повседневной полезности: быстрый поиск по файловому дереву и явная metadata visibility важнее следующего слоя UI-polish.
+- **Context:** В [tui-client/src/main.rs](/home/mrz/projects/edex-ui-2026/rust/crates/tui-client/src/main.rs) добавлены `InputMode::FileSearch`, `DaemonClient::file_search()`, keybindings `f` и `c`, `file_search_results` как transient view, scope badge в header/footer и session metadata в agent pane. `cargo check -p tui-client`, `cargo test -p tui-client` и `cargo clippy -p tui-client -- -D warnings` зелёные.
+
+## [2026-04-09] TUI Jump Navigation Layer
+- **Decision:** Добавить быстрые jump/navigation действия поверх уже существующего file search и workspace model.
+- **Reason:** После появления file search следующий bottleneck был в том, что найденные пути и roots/bookmarks нельзя было достаточно быстро превращать в навигацию внутри интерфейса.
+- **Context:** В [tui-client/src/main.rs](/home/mrz/projects/edex-ui-2026/rust/crates/tui-client/src/main.rs) добавлены `g` для jump в workspace root, `b` для cycle по roots/bookmarks, `o` для открытия top file-search hit, а правая верхняя панель теперь честно подписывает режим как `History`, `Context` или `File Search`. `cargo check -p tui-client`, `cargo test -p tui-client` и `cargo clippy -p tui-client -- -D warnings` зелёные.
+
+## [2026-04-09] TUI Dev Launcher
+- **Decision:** Добавить единый host-side launcher для удобного тестового запуска TUI без ручной склейки нескольких длинных команд.
+- **Reason:** Для регулярной визуальной проверки нужен короткий и воспроизводимый запуск, который сам поднимает daemon, ждёт UDS socket и стартует TUI с тестовыми путями.
+- **Context:** Добавлен [scripts/run-tui-dev.sh](/home/mrz/projects/edex-ui-2026/scripts/run-tui-dev.sh) с режимами `interactive` и `--smoke`; [rust/README.md](/home/mrz/projects/edex-ui-2026/rust/README.md) обновлён; host-side proof подтверждён командой `./scripts/run-tui-dev.sh --smoke`, результат: `TUI SMOKE OK workspaces=1 sessions=1 files=27`.
+
 ## [2026-04-08] Current Project State
 - **Decision:** Зафиксировать проект как форк архивного `eDEX-UI` 2.2.8 с текущим чистым рабочим деревом и отдельным runtime-пакетом в `src/`.
 - **Reason:** Это определяет стартовую точку модернизации и объясняет, почему далее потребуется аудит безопасности, зависимостей и Electron-архитектуры.

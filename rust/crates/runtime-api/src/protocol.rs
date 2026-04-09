@@ -13,6 +13,14 @@ use crate::framing::FrameAssumptions;
 
 pub const API_VERSION: &str = "0.1.0-dev";
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkspaceSummary {
+    pub id: Uuid,
+    pub name: String,
+    pub roots: Vec<String>,
+    pub bookmarks: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestKind {
@@ -77,6 +85,7 @@ pub enum Command {
     RunAgentTask {
         task_id: Uuid,
         workspace_id: Uuid,
+        session_id: Option<Uuid>,
         cwd: Option<String>,
         prompt: String,
         model: Option<String>,
@@ -126,6 +135,7 @@ pub enum Query {
     Health,
     AgentProviderStatus,
     WorkspaceCount,
+    Workspaces,
     ContextSearch {
         workspace_id: Option<Uuid>,
         session_id: Option<Uuid>,
@@ -278,6 +288,9 @@ pub enum ResponsePayload {
     },
     WorkspaceCount {
         workspace_count: usize,
+    },
+    Workspaces {
+        workspaces: Vec<WorkspaceSummary>,
     },
     AgentTaskCompleted {
         task: AgentTask,
@@ -550,6 +563,7 @@ mod tests {
             Command::RunAgentTask {
                 task_id: Uuid::new_v4(),
                 workspace_id: Uuid::new_v4(),
+                session_id: Some(Uuid::new_v4()),
                 cwd: Some("/workspace".into()),
                 prompt: "summarize recent failures".into(),
                 model: Some("claude-opus-4-6".into()),
@@ -568,6 +582,7 @@ mod tests {
         assert!(matches!(
             decoded.payload,
             RequestPayload::Command(Command::RunAgentTask {
+                session_id: Some(_),
                 context_limit: 5,
                 ..
             })
@@ -582,6 +597,17 @@ mod tests {
         assert!(matches!(
             decoded.payload,
             RequestPayload::Query(Query::AgentProviderStatus)
+        ));
+
+        let query = RequestEnvelope::query("req-workspaces", Query::Workspaces);
+        let encoded = encode_json_frame(&query).expect("frame encodes");
+        let decoded: RequestEnvelope =
+            decode_json_frame(std::str::from_utf8(&encoded).expect("utf8"))
+                .expect("frame decodes")
+                .expect("frame contains payload");
+        assert!(matches!(
+            decoded.payload,
+            RequestPayload::Query(Query::Workspaces)
         ));
     }
 
@@ -726,6 +752,29 @@ mod tests {
             decoded.payload,
             ResponsePayload::FileSearchResults { .. }
         ));
+    }
+
+    #[test]
+    fn workspace_payload_roundtrips() {
+        let envelope = ResponseEnvelope::ok(
+            "req-workspaces".into(),
+            ResponsePayload::Workspaces {
+                workspaces: vec![WorkspaceSummary {
+                    id: Uuid::new_v4(),
+                    name: "alpha".into(),
+                    roots: vec!["/workspace".into()],
+                    bookmarks: vec!["/workspace/src".into()],
+                }],
+            },
+        );
+
+        let encoded = encode_json_frame(&envelope).expect("frame encodes");
+        let decoded: ResponseEnvelope =
+            decode_json_frame(std::str::from_utf8(&encoded).expect("utf8"))
+                .expect("frame decodes")
+                .expect("frame contains payload");
+
+        assert!(matches!(decoded.payload, ResponsePayload::Workspaces { .. }));
     }
 
     #[test]

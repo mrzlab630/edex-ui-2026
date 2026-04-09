@@ -216,6 +216,7 @@ printf 'cwd=%s\nargs=%s\n' "$PWD" "$*"
         let task = AgentTask::new(AgentTaskDraft {
             id: Uuid::new_v4(),
             workspace_id: Uuid::new_v4(),
+            session_id: None,
             cwd: cwd.clone(),
             prompt: "summarize recent failures".into(),
             model: Some("claude-opus-4-6".into()),

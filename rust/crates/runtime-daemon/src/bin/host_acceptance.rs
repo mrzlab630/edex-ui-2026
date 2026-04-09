@@ -194,6 +194,7 @@ async fn main() -> Result<()> {
                 Command::RunAgentTask {
                     task_id: Uuid::new_v4(),
                     workspace_id,
+                    session_id: None,
                     cwd: Some(workspace_root.display().to_string()),
                     prompt: "Summarize the current workspace state".into(),
                     model: Some("claude-opus-4-6".into()),

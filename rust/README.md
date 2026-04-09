@@ -65,6 +65,28 @@
 - нет remote/PTY helper crates по умолчанию
 - нет раннего `tokio-util`/`tokio-rusqlite`/`portable-pty`
 
+## TUI Adapter Branch
+
+Ветка `tui-client` открывает следующий слой поверх этого ядра: тонкий Linux-first terminal client, который общается только с daemon по UDS и не владеет state/policy/session logic.
+
+Текущий первый TUI slice:
+
+- crate `tui-client`
+- только `crossterm`, без `ratatui` и других layout frameworks
+- reuse `runtime-api::{encode_json_frame, decode_json_frame}`
+- `Workspaces` query как явный daemon-owned overview contract
+- workspace bootstrap через `RegisterWorkspace`
+- local tmux session create/remove через `RegisterLocalTmuxSession` / `RemoveSession`
+- workspaces / sessions / files / preview / history / context / agent status / agent prompt
+- smoke mode: `cargo run -p tui-client -- --smoke`
+
+Hard boundary для `tui-client`:
+
+- нет прямых доступов к SQLite/history/state files
+- нет прямых вызовов `tmux`, `ssh`, `claw`
+- нет собственной policy logic
+- все file operations идут только через workspace-scoped daemon API
+
 Правило bootstrap:
 
 1. сначала доменные типы, state и local control plane
@@ -89,6 +111,9 @@ EDEX_CORE_BOOTSTRAP_ONLY=1 EDEX_CORE_STATE_DB=/tmp/edex-ui-2026-rust-core.sqlite
 EDEX_CORE_BOOTSTRAP_ONLY=1 EDEX_CORE_MASTER_PASSPHRASE=test-passphrase EDEX_CORE_STATE_DB=/tmp/edex-ui-2026-rust-core.sqlite3 EDEX_CORE_HISTORY_DB=/tmp/edex-ui-2026-rust-history.sqlite3 cargo run -p runtime-daemon
 cargo build -p runtime-daemon --bin host_acceptance
 ./target/debug/host_acceptance
+cargo run -p tui-client -- --smoke
+../scripts/run-tui-dev.sh
+../scripts/run-tui-dev.sh --smoke
 ```
 
 Примечание:
@@ -104,4 +129,6 @@ cargo build -p runtime-daemon --bin host_acceptance
 - `secrets-store` уже умеет optional Secret Service lookup через `EDEX_CORE_SECRET_SERVICE_LOOKUP=1`; текущая host-side probatio подтверждена только для env source, а не для живого user keyring
 - host-side local `claw doctor` / `claw status` proof подтверждён; реальный bounded `claw prompt` запуск против внешнего provider path на этом хосте пока не дал завершённого ответа и завершился по `timeout 20s`
 - host acceptance harness теперь существует как [host_acceptance.rs](/home/mrz/projects/edex-ui-2026/rust/crates/runtime-daemon/src/bin/host_acceptance.rs) и доказан host-side: live UDS transport, file-index, context, recovery import/export, fake-claw agent execution и tmux cleanup прошли end-to-end
+- первый TUI smoke against live daemon тоже подтверждён host-side через отдельный socket в `/tmp`: `TUI SMOKE OK`
+- populated TUI smoke тоже подтверждён host-side: `TUI SMOKE OK workspaces=1 sessions=1 files=26`
 - TPM2-backed key storage остаётся следующим Linux-specific слоем
